@@ -1,0 +1,13 @@
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\AuthMe.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\AuthMe.pdb
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\Assembly-CSharp.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\Facepunch.ID.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\Facepunch.MeshBatch.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\RustBuster2016.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\uLink.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\bin\Release\UnityEngine.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\obj\Release\AuthMe.csprojResolveAssemblyReference.cache
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\obj\Release\AuthMe.csproj.CoreCompileInputs.cache
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\obj\Release\AuthMe.csproj.CopyComplete
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\obj\Release\AuthMe.dll
+E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe\AuthMe\obj\Release\AuthMe.pdb
