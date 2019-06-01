@@ -69,18 +69,8 @@ namespace AuthMe
         internal void StartMyRPCs()
         {
             if (MainGameObject != null) {UnityEngine.Object.Destroy(MainGameObject);}
-            string receive = this.SendMessageToServer("AuthMeR-" + RustBuster2016.API.Hooks.SteamID);
-            if (!string.IsNullOrEmpty(receive) && receive == "has")
-            {
-                // Add our Behaviour that is containing all the RPC methods to the player.
-                Checker = PlayerClient.GetLocalPlayer().gameObject.AddComponent<AuthChecker>();
-            }
-        }
-
-        public string SHA1Hash(string input)
-        {
-            var hash = (new SHA1Managed()).ComputeHash(Encoding.UTF8.GetBytes(input));
-            return string.Join("", hash.Select(b => b.ToString("x2")).ToArray());
+            // Add our Behaviour that is containing all the RPC methods to the player.
+            Checker = PlayerClient.GetLocalPlayer().gameObject.AddComponent<AuthChecker>();
         }
     }
 }
