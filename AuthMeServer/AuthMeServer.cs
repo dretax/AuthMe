@@ -77,6 +77,10 @@ namespace AuthMeServer
             Hooks.OnEntityHurt += OnEntityHurt;
             Hooks.OnPlayerConnected += OnPlayerConnected;
             Hooks.OnPlayerSpawned += OnPlayerSpawned;
+            Hooks.OnEntityDeployedWithPlacer += OnEntityDeployedWithPlacer;
+            Hooks.OnCrafting += OnCrafting;
+            Hooks.OnResearch += OnResearch;
+            Hooks.OnItemAdded += OnItemAdded;
         }
 
         public override void DeInitialize()
@@ -89,6 +93,47 @@ namespace AuthMeServer
             Hooks.OnEntityHurt -= OnEntityHurt;
             Hooks.OnPlayerConnected -= OnPlayerConnected;
             Hooks.OnPlayerSpawned -= OnPlayerSpawned;
+            Hooks.OnEntityDeployedWithPlacer -= OnEntityDeployedWithPlacer;
+            Hooks.OnCrafting -= OnCrafting;
+            Hooks.OnResearch -= OnResearch;
+            Hooks.OnItemAdded -= OnItemAdded;
+        }
+
+        private void OnItemAdded(InventoryModEvent e)
+        {
+            if (e.Player != null)
+            {
+                if (WaitingUsers.Contains(e.Player.UID))
+                {
+                    e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                    e.Cancel();
+                }
+            }
+        }
+
+        private void OnResearch(ResearchEvent re)
+        {
+            if (WaitingUsers.Contains(re.Player.UID))
+            {
+                re.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+            }
+        }
+
+        private void OnCrafting(CraftingEvent e)
+        {
+            if (WaitingUsers.Contains(e.Player.UID))
+            {
+                e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+            }
+        }
+
+        private void OnEntityDeployedWithPlacer(Fougerite.Player player, Entity e, Fougerite.Player actualplacer)
+        {
+            if (WaitingUsers.Contains(player.UID))
+            {
+                e.Destroy();
+                player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+            }
         }
 
         private void OnPlayerSpawned(Fougerite.Player player, SpawnEvent se)
@@ -126,6 +171,7 @@ namespace AuthMeServer
             if (WaitingUsers.Contains(player.UID))
             {
                 text.NewText = string.Empty;
+                player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
             }
         }
 
@@ -136,6 +182,7 @@ namespace AuthMeServer
                 if (WaitingUsers.Contains(e.Player.UID))
                 {
                     e.Cancel();
+                    e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
                 }
             }
         }
@@ -174,7 +221,7 @@ namespace AuthMeServer
                         Fougerite.Player attacker = (Fougerite.Player) he.Attacker;
                         if (WaitingUsers.Contains(attacker.UID))
                         {
-                            attacker.MessageFrom("AuthMe", red + "You can't do this.");
+                            attacker.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
                             he.DamageAmount = 0f;
                         }
                     }
