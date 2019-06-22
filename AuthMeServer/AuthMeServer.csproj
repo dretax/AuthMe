@@ -59,6 +59,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="AuthLogger.cs" />
     <Compile Include="AuthMeServer.cs" />
     <Compile Include="AuthMeTE.cs" />
     <Compile Include="Credential.cs" />

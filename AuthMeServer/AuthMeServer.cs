@@ -21,6 +21,7 @@ namespace AuthMeServer
         internal readonly Dictionary<ulong, Credential> Credentials = new Dictionary<ulong, Credential>();
         
         public IniParser Auths;
+        public static string AuthLogPath;
         public readonly List<string> RestrictedCommands = new List<string>();
         public const string red = "[color #FF0000]";
         public const string yellow = "[color yellow]";
@@ -59,6 +60,15 @@ namespace AuthMeServer
             {
                 File.Create(ModuleFolder + "\\Data.ini").Dispose();
             }
+
+            AuthLogPath = ModuleFolder + "\\Logs";
+            if (!Directory.Exists(AuthLogPath))
+            {
+                Directory.CreateDirectory(AuthLogPath);
+            }
+
+            AuthLogger.LogWriterInit();
+            
             Auths = new IniParser(ModuleFolder + "\\Data.ini");
             foreach (string id in Auths.EnumSection("Login"))
             {
@@ -372,6 +382,8 @@ namespace AuthMeServer
                                     
                                     player.MessageFrom("AuthMe", green + "User: " + plr.Name + " reset! He can now register a new account for that steamid.");
                                     plr.MessageFrom("AuthMe", green + CredsReset);
+                                    AuthLogger.Log("[USER RESET] " + player.Name + " - " + player.SteamID 
+                                                   + " - " + player.IP + " reset credetials for: " + plr.Name + " - " + plr.SteamID + " - " + plr.IP);
                                 }
                             }
 
@@ -413,7 +425,17 @@ namespace AuthMeServer
                             Credentials.Add(player.UID, new Credential(username.ToLower(), hash));
                             player.MessageFrom("AuthMe", orange + "You have registered with: " + username + " - " + password + " (Your console has this info now too.)");
                             player.SendConsoleMessage(orange + "You have registered with: " + username + " - " + password);
-                            player.MessageFrom("AuthMe", "Please login using: /authme login username password");
+                            
+                            WaitingUsers.Remove(player.UID);
+                            uLink.NetworkView.Get(player.PlayerClient.networkView)
+                                .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                                
+                            foreach (var x in RestrictedCommands)
+                            {
+                                player.UnRestrictCommand(x);
+                            }
+
+                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " registered an account: " + username);
                             break;
                         case "login":
                             if (!WaitingUsers.Contains(player.UID))
@@ -436,11 +458,13 @@ namespace AuthMeServer
                             if (cred.Username.ToLower() != username2.ToLower())
                             {
                                 player.MessageFrom("AuthMe", "Invalid username!");
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " tried to login using: " + username2);
                                 return;
                             }
     
                             if (cred.HashedPassword != SHA1Hash(password2))
                             {
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " tried to login using: " + username2);
                                 player.MessageFrom("AuthMe", "Invalid password! Seek admin for help on their social site.");
                             }
                             else
@@ -453,6 +477,7 @@ namespace AuthMeServer
                                 {
                                     player.UnRestrictCommand(x);
                                 }
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " logged in using: " + username2);
                                 player.MessageFrom("AuthMe", "Successfully logged in!");
                             }
                             break;
@@ -484,6 +509,7 @@ namespace AuthMeServer
                             Auths.SetSetting("Login", player.SteamID, username3.ToLower() + "---##---" + hash3);
                             Auths.Save();
                             Credentials.Add(player.UID, new Credential(username3.ToLower(), hash3));
+                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " changed password using: " + username3);
                             
                             player.MessageFrom("AuthMe", "Password successfully changed!");
                             break;
