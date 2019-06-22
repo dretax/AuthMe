@@ -11,8 +11,10 @@ namespace AuthMe
     public class AuthMe : RustBuster2016.API.RustBusterPlugin
     {
         internal GameObject MainGameObject;
+        internal GameObject AuthGameObject;
         internal AuthChecker Checker;
         private static AuthMe _inst;
+        internal Login _login;
         
         public override string Name
         {
@@ -21,7 +23,7 @@ namespace AuthMe
 
         public override string Author
         {
-            get { return "DreTaX"; }
+            get { return "DreTaX, Salva"; }
         }
 
         public override Version Version
@@ -38,8 +40,11 @@ namespace AuthMe
         {
             _inst = this;
             MainGameObject = new GameObject();
+            AuthGameObject = new GameObject();
             MainGameObject.AddComponent<CharacterWaiter>();
+            _login = AuthGameObject.AddComponent<Login>();
             UnityEngine.Object.DontDestroyOnLoad(MainGameObject);
+            UnityEngine.Object.DontDestroyOnLoad(AuthGameObject);
         }
 
         public override void DeInitialize()

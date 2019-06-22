@@ -59,6 +59,7 @@
     <Compile Include="AuthChecker.cs" />
     <Compile Include="AuthMe.cs" />
     <Compile Include="CharacterWaiter.cs" />
+    <Compile Include="Login.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

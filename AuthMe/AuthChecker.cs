@@ -5,25 +5,6 @@ namespace AuthMe
     public class AuthChecker : MonoBehaviour
     {
         private bool _Freezing = false;
-        
-        private void Start()
-        {
-            _Freezing = true;
-            Invoke(nameof(LoginAlert), 10f);
-            if (_Freezing)
-            {
-                Rust.Notice.Popup("", "Type /authme login username password to login.");
-            }
-        }
-
-        private void LoginAlert()
-        {
-            if (_Freezing)
-            {
-                Rust.Notice.Popup("", "Type /authme login username password to login.", 7f);
-            }
-            Invoke(nameof(LoginAlert), 10f);
-        }
 
         private void FixedUpdate()
         {
@@ -34,7 +15,7 @@ namespace AuthMe
                 if (player != null)
                 {
                     player.lockMovement = true;
-                    player.lockLook = true;
+                    //player.lockLook = true;
                 }
             }
         }
@@ -51,7 +32,7 @@ namespace AuthMe
                 {
                     // Thanks Jakkee
                     player.lockMovement = false;
-                    player.lockLook = false;
+                    //player.lockLook = false;
                 }
             }
         }
@@ -65,7 +46,7 @@ namespace AuthMe
                 if (player != null)
                 {
                     player.lockMovement = false;
-                    player.lockLook = false;
+                    //player.lockLook = false;
                 }
             }
         }

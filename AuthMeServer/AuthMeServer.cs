@@ -30,9 +30,7 @@ namespace AuthMeServer
         public const string orange = "[color #ffa500]";
         public const string YouNeedToBeLoggedIn = "You can't do this. You need to be logged in.";
         public const string CredsReset = "Your credentials are reset! Type /authme register username password";
-        public const int TimeToLogin = 13;
-        
-        // todo: gui
+        public const int TimeToLogin = 45;
         
         public override string Name
         {
@@ -105,10 +103,16 @@ namespace AuthMeServer
             Hooks.OnResearch += OnResearch;
             Hooks.OnItemAdded += OnItemAdded;
             Hooks.OnConsoleReceived += OnConsoleReceived;
+            Hooks.OnModulesLoaded += OnModulesLoaded;
         }
 
         public override void DeInitialize()
         {
+            if (FoundRB)
+            {
+                RustBuster2016Server.API.OnRustBusterUserMessage -= OnRustBusterUserMessage;
+            }
+            
             Hooks.OnCommand -= OnCommand;
             Hooks.OnPlayerHurt -= OnPlayerHurt;
             Hooks.OnPlayerDisconnected -= OnPlayerDisconnected;
@@ -208,10 +212,155 @@ namespace AuthMeServer
             Fougerite.Player player = (Fougerite.Player) data["Player"];
             if (player.IsOnline && WaitingUsers.Contains(player.UID))
             {
-                player.Disconnect();
+                player.Disconnect(); // todo: Seems like there is a client side error that causes crash?...
             }
         }
         
+        private void OnModulesLoaded()
+        {
+            foreach (var x in Fougerite.PluginLoaders.PluginLoader.GetInstance().Plugins.Values)
+            {
+                if (x.Name == "RustBusterServer")
+                {
+                    FoundRB = true;
+                    RustBuster2016Server.API.OnRustBusterUserMessage += OnRustBusterUserMessage;
+                    break;
+                }
+            }
+        }
+
+        private void OnRustBusterUserMessage(API.RustBusterUserAPI user, Message msgc)
+        {
+            if (msgc.PluginSender == "AuthMe")
+            {
+                Fougerite.Player player = user.Player;
+                
+                string[] spl = msgc.MessageByClient.Split('-');
+                if (spl.Length != 3)
+                {
+                    return;
+                }
+                
+                string evt = spl[0];
+                string username = spl[1];
+                string password = spl[2];
+                if (evt == "AuthMeLogin")
+                {
+                    if (!WaitingUsers.Contains(player.UID))
+                    {
+                        player.MessageFrom("AuthMe", "You are logged in already.");
+                        msgc.ReturnMessage = "DisApproved";
+                        return;
+                    }
+
+                    if (!Credentials.ContainsKey(player.UID))
+                    {
+                        player.MessageFrom("AuthMe", "This steamid is not registered yet!");
+                        player.MessageFrom("AuthMe", "Type /authme register username password");
+                        msgc.ReturnMessage = "DisApproved";
+                        return;
+                    }
+
+                    Credential cred = Credentials[player.UID];
+                    if (!string.Equals(cred.Username, username, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        player.MessageFrom("AuthMe", "Invalid username!");
+                        AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                       " tried to login using: " + username);
+                        msgc.ReturnMessage = "DisApproved";
+                        return;
+                    }
+                    
+                    if (username.Length > 25 || password.Length > 25)
+                    {
+                        player.MessageFrom("AuthMe", "Sorry, username and password length must be below 25.");
+                        msgc.ReturnMessage = "DisApproved";
+                        return;
+                    }
+
+                    if (cred.HashedPassword != SHA1Hash(password))
+                    {
+                        AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                       " tried to login using: " + username);
+                        player.MessageFrom("AuthMe", "Invalid password! Seek admin for help on their social site.");
+                        msgc.ReturnMessage = "DisApproved";
+                    }
+                    else
+                    {
+                        WaitingUsers.Remove(player.UID);
+                        uLink.NetworkView.Get(player.PlayerClient.networkView)
+                            .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+
+                        foreach (var x in RestrictedCommands)
+                        {
+                            player.UnRestrictCommand(x);
+                        }
+
+                        AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " logged in using: " +
+                                       username);
+                        player.MessageFrom("AuthMe", "Successfully logged in!");
+                        msgc.ReturnMessage = "Approved";
+                    }
+                }
+                else if (evt == "AuthMeRegister")
+                {
+                    if (Credentials.ContainsKey(player.UID))
+                    {
+                        player.MessageFrom("AuthMe",
+                            "This STEAMID is already protected using password authentication!");
+                        msgc.ReturnMessage = "InvalidRegistration";
+                        return;
+                    }
+
+                    if (username.ToLower() == "username" || password.ToLower() == "password")
+                    {
+                        player.MessageFrom("AuthMe", "Type /authme register username password");
+                        msgc.ReturnMessage = "InvalidRegistration";
+                        return;
+                    }
+
+                    bool b = Regex.IsMatch(username, @"^[a-zA-Z0-9_&@%!+<>]+$");
+                    bool b2 = Regex.IsMatch(password, @"^[a-zA-Z0-9_&@%!+<>]+$");
+
+                    if (!b || !b2)
+                    {
+                        player.MessageFrom("AuthMe", "Sorry, no special characters or space! Only: a-zA-Z0-9_&@%!+<>");
+                        msgc.ReturnMessage = "InvalidRegistration";
+                        return;
+                    }
+
+                    if (username.Length > 25 || password.Length > 25)
+                    {
+                        player.MessageFrom("AuthMe", "Sorry, username and password length must be below 25.");
+                        msgc.ReturnMessage = "InvalidRegistration";
+                        return;
+                    }
+
+                    string hash = SHA1Hash(password);
+                    Auths.AddSetting("Login", player.SteamID, username.ToLower() + "---##---" + hash);
+                    Auths.Save();
+                    Credentials.Add(player.UID, new Credential(username.ToLower(), hash));
+                    player.MessageFrom("AuthMe",
+                        orange + "You have registered with: " + username + " - " + password +
+                        " (Your console has this info now too.)");
+                    player.SendConsoleMessage(orange + "You have registered with: " + username + " - " + password);
+
+                    WaitingUsers.Remove(player.UID);
+                    uLink.NetworkView.Get(player.PlayerClient.networkView)
+                        .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+
+                    foreach (var x in RestrictedCommands)
+                    {
+                        player.UnRestrictCommand(x);
+                    }
+
+                    AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                   " registered an account: " + username);
+                    msgc.ReturnMessage = "ValidRegistration";
+                }
+            }
+        }
+
         private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external)
         {
             if (arg.Class == "authme" && arg.Function == "resetuser")
@@ -466,6 +615,7 @@ namespace AuthMeServer
                                 player.MessageFrom("AuthMe", "This STEAMID is already protected using password authentication!");
                                 return;
                             }
+                            
                             string username = args[1];
                             string password = args[2];
 
@@ -481,6 +631,12 @@ namespace AuthMeServer
                             if (!b || !b2)
                             {
                                 player.MessageFrom("AuthMe", "Sorry, no special characters or space! Only: a-zA-Z0-9_&@%!+<>");
+                                return;
+                            }
+                            
+                            if (username.Length > 25 || password.Length > 25)
+                            {
+                                player.MessageFrom("AuthMe", "Sorry, username and password length must be below 25.");
                                 return;
                             }
                             
@@ -511,6 +667,12 @@ namespace AuthMeServer
     
                             string username2 = args[1];
                             string password2 = args[2];
+                            
+                            if (username2.Length > 25 || password2.Length > 25)
+                            {
+                                player.MessageFrom("AuthMe", "Sorry, username and password length must be below 25.");
+                                return;
+                            }
                             
                             if (!Credentials.ContainsKey(player.UID))
                             {
@@ -565,6 +727,12 @@ namespace AuthMeServer
                             if (!string.Equals(cred2.Username, username3, StringComparison.CurrentCultureIgnoreCase))
                             {
                                 player.MessageFrom("AuthMe", "Invalid username!");
+                                return;
+                            }
+                            
+                            if (username3.Length > 25 || password3.Length > 25)
+                            {
+                                player.MessageFrom("AuthMe", "Sorry, username and password length must be below 25.");
                                 return;
                             }
 
