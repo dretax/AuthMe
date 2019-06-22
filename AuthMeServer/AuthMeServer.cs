@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Fougerite;
 using Fougerite.Events;
 using RustBuster2016Server;
@@ -70,20 +71,26 @@ namespace AuthMeServer
             AuthLogger.LogWriterInit();
             
             Auths = new IniParser(ModuleFolder + "\\Data.ini");
-            foreach (string id in Auths.EnumSection("Login"))
+
+            Thread t = new Thread(() =>
             {
-                string userpw = Auths.GetSetting("Login", id);
-                try
+                foreach (string id in Auths.EnumSection("Login"))
                 {
-                    ulong uid = ulong.Parse(id);
-                    string[] spl = userpw.Split(new string[] { "---##---" }, StringSplitOptions.None);
-                    Credentials.Add(uid, new Credential(spl[0].ToLower(), spl[1]));
+                    string userpw = Auths.GetSetting("Login", id);
+                    try
+                    {
+                        ulong uid = ulong.Parse(id);
+                        string[] spl = userpw.Split(new string[] {"---##---"}, StringSplitOptions.None);
+                        Credentials.Add(uid, new Credential(spl[0].ToLower(), spl[1]));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogError("[AuthMe] Invalid data at: " + id + " " + userpw + " Error: " + ex);
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Logger.LogError("[AuthMe] Invalid data at: " + id + " " + userpw + " Error: " + ex);
-                }
-            }
+            });
+            t.IsBackground = true;
+            t.Start();
             
             Hooks.OnCommand += OnCommand;
             Hooks.OnPlayerHurt += OnPlayerHurt;
@@ -97,6 +104,7 @@ namespace AuthMeServer
             Hooks.OnCrafting += OnCrafting;
             Hooks.OnResearch += OnResearch;
             Hooks.OnItemAdded += OnItemAdded;
+            Hooks.OnConsoleReceived += OnConsoleReceived;
         }
 
         public override void DeInitialize()
@@ -113,6 +121,7 @@ namespace AuthMeServer
             Hooks.OnCrafting -= OnCrafting;
             Hooks.OnResearch -= OnResearch;
             Hooks.OnItemAdded -= OnItemAdded;
+            Hooks.OnConsoleReceived -= OnConsoleReceived;
         }
 
         /// <summary>
@@ -200,6 +209,62 @@ namespace AuthMeServer
             if (player.IsOnline && WaitingUsers.Contains(player.UID))
             {
                 player.Disconnect();
+            }
+        }
+        
+        private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external)
+        {
+            if (arg.Class == "authme" && arg.Function == "resetuser")
+            {
+                if ((arg.argUser != null && arg.argUser.admin) || arg.argUser == null)
+                {
+                    Fougerite.Player adminplr = null;
+                    if (arg.argUser != null)
+                    {
+                        adminplr = Fougerite.Server.GetServer().FindPlayer(arg.argUser.userID);
+                    }
+                    
+                    string name = string.Join(" ", arg.Args);
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        arg.ReplyWith(green + "Specify a name!");
+                        return;
+                    }
+                    
+                    Fougerite.Player plr = Fougerite.Server.GetServer().FindPlayer(name);
+                    if (plr != null)
+                    {
+                        if (Auths.GetSetting("Login", plr.SteamID) != null)
+                        {
+                            Auths.DeleteSetting("Login", plr.SteamID);
+                            Auths.Save();
+                        }
+
+                        if (Credentials.ContainsKey(plr.UID))
+                        {
+                            Credentials.Remove(plr.UID);
+                        }
+                                    
+                        arg.ReplyWith(green + "User: " + plr.Name + " reset! He can now register a new account for that steamid.");
+                        plr.MessageFrom("AuthMe", green + CredsReset);
+
+                        if (adminplr != null)
+                        {
+                            AuthLogger.Log("[USER RESET] " + adminplr.Name + " - " + adminplr.SteamID
+                                           + " - " + adminplr.IP + " reset credetials for: " + plr.Name + " - " +
+                                           plr.SteamID + " - " + plr.IP);
+                        }
+                        else
+                        {
+                            AuthLogger.Log("[USER RESET] Console reset credetials for: " + plr.Name + " - " +
+                                           plr.SteamID + " - " + plr.IP);
+                        }
+                    }
+                    else
+                    {
+                        arg.ReplyWith(green + "No player found!");
+                    }
+                }
             }
         }
 
@@ -404,18 +469,18 @@ namespace AuthMeServer
                             string username = args[1];
                             string password = args[2];
 
-                            if (username == "username" || password == "password")
+                            if (username.ToLower() == "username" || password.ToLower() == "password")
                             {
                                 player.MessageFrom("AuthMe", "Type /authme register username password");
                                 return;
                             }
                             
-                            bool b = Regex.IsMatch(username, @"^[a-zA-Z0-9_#&@%!+<>]+$");
-                            bool b2 = Regex.IsMatch(password, @"^[a-zA-Z0-9_#&@%!+<>]+$");
+                            bool b = Regex.IsMatch(username, @"^[a-zA-Z0-9_&@%!+<>]+$");
+                            bool b2 = Regex.IsMatch(password, @"^[a-zA-Z0-9_&@%!+<>]+$");
 
                             if (!b || !b2)
                             {
-                                player.MessageFrom("AuthMe", "Sorry, no special characters or space! Only: a-zA-Z0-9_#&@%!+<>");
+                                player.MessageFrom("AuthMe", "Sorry, no special characters or space! Only: a-zA-Z0-9_&@%!+<>");
                                 return;
                             }
                             

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ContentModelStore">
-    <e p="C:\Users\DreTaX\.Rider2018.1\system\resharper-host\local\Transient\ReSharperHost\v12\SolutionCaches\_AuthMe.-1183649739.00" t="ExcludeRecursive" />
+    <e p="C:\Users\D\.Rider2018.3\config\consoles\db" t="IncludeRecursive" />
+    <e p="C:\Users\D\.Rider2018.3\config\extensions" t="IncludeRecursive" />
+    <e p="C:\Users\D\.Rider2018.3\system\extResources" t="IncludeRecursive" />
+    <e p="C:\Users\D\.Rider2018.3\system\resharper-host\local\Transient\ReSharperHost\v183\SolutionCaches\_AuthMe.-1183649739.00" t="ExcludeRecursive" />
     <e p="E:\Users\DreTaX\Documents\Visual Studio 2013\AuthMe" t="IncludeFlat">
       <e p="AuthMe" t="IncludeRecursive">
         <e p="AuthChecker.cs" t="Include" />
@@ -16,9 +19,12 @@
       </e>
       <e p="AuthMe.sln" t="IncludeFlat" />
       <e p="AuthMeServer" t="IncludeRecursive">
+        <e p="AuthLogger.cs" t="Include" />
         <e p="AuthMeServer.cs" t="Include" />
         <e p="AuthMeServer.csproj" t="IncludeRecursive" />
+        <e p="AuthMeTE.cs" t="Include" />
         <e p="bin" t="ExcludeRecursive" />
+        <e p="Credential.cs" t="Include" />
         <e p="obj" t="ExcludeRecursive" />
         <e p="Properties" t="Include">
           <e p="AssemblyInfo.cs" t="Include" />
