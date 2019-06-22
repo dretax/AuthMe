@@ -40,7 +40,7 @@ namespace AuthMe
         }
         
         [RPC]
-        public void DestroyFreeze()
+        public void DestroyFreezeAuthMe()
         {
             _Freezing = false;
             this.enabled = false;

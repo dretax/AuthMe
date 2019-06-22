@@ -14,17 +14,22 @@ namespace AuthMeServer
 {
     public class AuthMeServer : Fougerite.Module
     {
+        private static AuthMeServer _instance;
         internal bool FoundRB = false;
         internal readonly List<ulong> WaitingUsers = new List<ulong>();
         internal readonly List<ulong> SpawnedUsers = new List<ulong>();
-        public IniParser Auths;
         internal readonly Dictionary<ulong, Credential> Credentials = new Dictionary<ulong, Credential>();
+        
+        public IniParser Auths;
+        public readonly List<string> RestrictedCommands = new List<string>();
         public const string red = "[color #FF0000]";
         public const string yellow = "[color yellow]";
         public const string green = "[color green]";
         public const string orange = "[color #ffa500]";
+        public const string YouNeedToBeLoggedIn = "You can't do this. You need to be logged in.";
+        public const string CredsReset = "Your credentials are reset! Type /authme register username password";
+        public const int TimeToLogin = 13;
         
-        // todo: Timer for new connections and kick for afk.
         // todo: gui
         
         public override string Name
@@ -49,6 +54,7 @@ namespace AuthMeServer
         
         public override void Initialize()
         {
+            _instance = this;
             if (!File.Exists(ModuleFolder + "\\Data.ini"))
             {
                 File.Create(ModuleFolder + "\\Data.ini").Dispose();
@@ -99,13 +105,101 @@ namespace AuthMeServer
             Hooks.OnItemAdded -= OnItemAdded;
         }
 
+        /// <summary>
+        /// API usage.
+        /// Returns the instance.
+        /// </summary>
+        /// <returns></returns>
+        public static AuthMeServer GetInstance()
+        {
+            return _instance;
+        }
+
+        /// <summary>
+        /// API usage.
+        /// Returns if the user has been logged in.
+        /// </summary>
+        /// <param name="steamid"></param>
+        /// <returns></returns>
+        public bool IsLoggedIn(ulong steamid)
+        {
+            return !WaitingUsers.Contains(steamid) && !SpawnedUsers.Contains(steamid);
+        }
+
+        /// <summary>
+        /// API usage.
+        /// Returns if the user has been logged in.
+        /// </summary>
+        /// <param name="player"></param>
+        /// <returns></returns>
+        public bool IsLoggedIn(Fougerite.Player player)
+        {
+            if (player != null)
+            {
+                return !WaitingUsers.Contains(player.UID) && !SpawnedUsers.Contains(player.UID);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// API usage.
+        /// Returns the user credentials if exists.
+        /// </summary>
+        /// <param name="steamid"></param>
+        /// <returns></returns>
+        public Credential GetCredential(ulong steamid)
+        {
+            if (Credentials.ContainsKey(steamid))
+            {
+                return Credentials[steamid];
+            }
+
+            return null;
+        }
+        
+        /// <summary>
+        /// API usage.
+        /// Returns the user credentials if exists.
+        /// </summary>
+        /// <param name="steamid"></param>
+        /// <returns></returns>
+        public Credential GetCredential(Fougerite.Player player)
+        {
+            if (Credentials.ContainsKey(player.UID))
+            {
+                return Credentials[player.UID];
+            }
+
+            return null;
+        }
+        
+        private AuthMeTE CreateParallelTimer(int timeoutDelay, Dictionary<string, object> args)
+        {
+            AuthMeTE timedEvent = new AuthMeTE(timeoutDelay);
+            timedEvent.Args = args;
+            timedEvent.OnFire += Callback;
+            return timedEvent;
+        }
+
+        private void Callback(AuthMeTE e)
+        {
+            e.Kill();
+            var data = e.Args;
+            Fougerite.Player player = (Fougerite.Player) data["Player"];
+            if (player.IsOnline && WaitingUsers.Contains(player.UID))
+            {
+                player.Disconnect();
+            }
+        }
+
         private void OnItemAdded(InventoryModEvent e)
         {
             if (e.Player != null)
             {
                 if (WaitingUsers.Contains(e.Player.UID))
                 {
-                    e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                    e.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
                     e.Cancel();
                 }
             }
@@ -115,7 +209,7 @@ namespace AuthMeServer
         {
             if (WaitingUsers.Contains(re.Player.UID))
             {
-                re.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                re.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
             }
         }
 
@@ -123,7 +217,7 @@ namespace AuthMeServer
         {
             if (WaitingUsers.Contains(e.Player.UID))
             {
-                e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                e.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
             }
         }
 
@@ -132,7 +226,7 @@ namespace AuthMeServer
             if (WaitingUsers.Contains(player.UID))
             {
                 e.Destroy();
-                player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
             }
         }
 
@@ -140,6 +234,15 @@ namespace AuthMeServer
         {
             if (SpawnedUsers.Contains(player.UID))
             {
+                foreach (var x in RestrictedCommands)
+                {
+                    player.RestrictCommand(x);
+                }
+                
+                Dictionary<string, object> Data = new Dictionary<string, object>();
+                Data["Player"] = player;
+                
+                CreateParallelTimer(TimeToLogin * 1000, Data).Start();
                 WaitingUsers.Add(player.UID);
                 SpawnedUsers.Remove(player.UID);
             }
@@ -160,7 +263,7 @@ namespace AuthMeServer
                 Fougerite.Player attacker = (Fougerite.Player) he.Attacker;
                 if (WaitingUsers.Contains(attacker.UID))
                 {
-                    attacker.MessageFrom("AuthMe", red + "You can't do this.");
+                    attacker.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
                     he.DamageAmount = 0f;
                 }
             }
@@ -171,7 +274,7 @@ namespace AuthMeServer
             if (WaitingUsers.Contains(player.UID))
             {
                 text.NewText = string.Empty;
-                player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
             }
         }
 
@@ -182,7 +285,7 @@ namespace AuthMeServer
                 if (WaitingUsers.Contains(e.Player.UID))
                 {
                     e.Cancel();
-                    e.Player.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                    e.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
                 }
             }
         }
@@ -221,7 +324,7 @@ namespace AuthMeServer
                         Fougerite.Player attacker = (Fougerite.Player) he.Attacker;
                         if (WaitingUsers.Contains(attacker.UID))
                         {
-                            attacker.MessageFrom("AuthMe", red + "You can't do this. You need to be logged in.");
+                            attacker.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
                             he.DamageAmount = 0f;
                         }
                     }
@@ -267,7 +370,8 @@ namespace AuthMeServer
                                         Credentials.Remove(plr.UID);
                                     }
                                     
-                                    plr.MessageFrom("AuthMe", "User reset! He can now register a new account for that steamid.");
+                                    player.MessageFrom("AuthMe", green + "User: " + plr.Name + " reset! He can now register a new account for that steamid.");
+                                    plr.MessageFrom("AuthMe", green + CredsReset);
                                 }
                             }
 
@@ -343,7 +447,12 @@ namespace AuthMeServer
                             {
                                 WaitingUsers.Remove(player.UID);
                                 uLink.NetworkView.Get(player.PlayerClient.networkView)
-                                    .RPC("DestroyFreeze", player.NetworkPlayer);
+                                    .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                                
+                                foreach (var x in RestrictedCommands)
+                                {
+                                    player.UnRestrictCommand(x);
+                                }
                                 player.MessageFrom("AuthMe", "Successfully logged in!");
                             }
                             break;
@@ -363,7 +472,7 @@ namespace AuthMeServer
                             }
 
                             Credential cred2 = Credentials[player.UID];
-                            if (cred2.Username.ToLower() != username3.ToLower())
+                            if (!string.Equals(cred2.Username, username3, StringComparison.CurrentCultureIgnoreCase))
                             {
                                 player.MessageFrom("AuthMe", "Invalid username!");
                                 return;

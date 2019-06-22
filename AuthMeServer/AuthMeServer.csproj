@@ -60,6 +60,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AuthMeServer.cs" />
+    <Compile Include="AuthMeTE.cs" />
     <Compile Include="Credential.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
