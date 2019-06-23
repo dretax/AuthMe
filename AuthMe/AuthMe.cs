@@ -50,7 +50,7 @@ namespace AuthMe
         public override void DeInitialize()
         {
             // Just incase.
-            if (PlayerClient.GetLocalPlayer() != null && PlayerClient.GetLocalPlayer().controllable != null)
+            /*if (PlayerClient.GetLocalPlayer() != null && PlayerClient.GetLocalPlayer().controllable != null)
             {
                 Character player = PlayerClient.GetLocalPlayer().controllable.GetComponent<Character>();
                 if (player != null)
@@ -58,12 +58,30 @@ namespace AuthMe
                     player.lockMovement = false;
                     player.lockLook = false;
                 }
+            }*/
+
+            if (Checker != null)
+            {
+                Checker.enabled = false;
             }
+
+            if (_login != null)
+            {
+                _login.enabled = false;
+            }
+
+            if (AuthGameObject != null)
+            {
+                UnityEngine.Object.Destroy(AuthGameObject);
+                AuthGameObject = null;
+            }
+            
             if (MainGameObject != null)
             {
                 UnityEngine.Object.Destroy(MainGameObject);
                 MainGameObject = null;
             }
+            
             if (Checker != null)
             {
                 UnityEngine.Object.Destroy(Checker);
