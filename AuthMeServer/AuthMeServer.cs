@@ -648,7 +648,7 @@ namespace AuthMeServer
                     string subcmd = args[0];
                     switch (subcmd)
                     {
-                        case "resetuser":
+                        case "reload":
                             if (player.Admin || player.Moderator)
                             {
                                 ReloadConfig();
