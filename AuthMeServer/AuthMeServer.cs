@@ -2,13 +2,14 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Fougerite;
+using Fougerite.Concurrent;
 using Fougerite.Events;
+using Fougerite.Permissions;
 using RustBuster2016Server;
 
 namespace AuthMeServer
@@ -17,14 +18,15 @@ namespace AuthMeServer
     {
         private static AuthMeServer _instance;
         internal bool FoundRB = false;
-        internal readonly Dictionary<ulong, PrivilegeStorage> WaitingUsers = new Dictionary<ulong, PrivilegeStorage>();
-        internal readonly List<ulong> SpawnedUsers = new List<ulong>();
-        internal readonly Dictionary<ulong, Credential> Credentials = new Dictionary<ulong, Credential>();
+        internal readonly ConcurrentDictionary<ulong, PrivilegeStorage> WaitingUsers = new ConcurrentDictionary<ulong, PrivilegeStorage>();
+        internal readonly ConcurrentList<ulong> SpawnedUsers = new ConcurrentList<ulong>();
+        internal readonly ConcurrentDictionary<ulong, Credential> Credentials = new ConcurrentDictionary<ulong, Credential>();
         
         public IniParser Auths;
         public IniParser Settings;
         public static string AuthLogPath;
         public readonly List<string> RestrictedCommands = new List<string>();
+        public readonly List<string> RestrictedConsoleCommands = new List<string>();
         public const string red = "[color #FF0000]";
         public const string yellow = "[color yellow]";
         public const string green = "[color green]";
@@ -33,6 +35,7 @@ namespace AuthMeServer
         public string CredsReset = "Your credentials are reset! Type /authme register username password";
         public string SocialSiteForHelp = "InsertYourSiteHere";
         public int TimeToLogin = 60;
+        public bool RemovePermissionsUntilLogin = true;
         
         public override string Name
         {
@@ -51,7 +54,7 @@ namespace AuthMeServer
 
         public override Version Version
         {
-            get { return new Version("1.0"); }
+            get { return new Version("1.1"); }
         }
         
         public override void Initialize()
@@ -83,7 +86,7 @@ namespace AuthMeServer
                     {
                         ulong uid = ulong.Parse(id);
                         string[] spl = userpw.Split(new string[] {"---##---"}, StringSplitOptions.None);
-                        Credentials.Add(uid, new Credential(spl[0].ToLower(), spl[1]));
+                        Credentials.TryAdd(uid, new Credential(spl[0].ToLower(), spl[1]));
                     }
                     catch (Exception ex)
                     {
@@ -106,8 +109,10 @@ namespace AuthMeServer
             Hooks.OnCrafting += OnCrafting;
             Hooks.OnResearch += OnResearch;
             Hooks.OnItemAdded += OnItemAdded;
-            Hooks.OnConsoleReceived += OnConsoleReceived;
+            Hooks.OnConsoleReceivedWithCancel += OnConsoleReceived;
             Hooks.OnModulesLoaded += OnModulesLoaded;
+            Hooks.OnBeltUse += OnBeltUse;
+            Hooks.OnLootUse += OnLootUse;
         }
 
         public override void DeInitialize()
@@ -129,7 +134,9 @@ namespace AuthMeServer
             Hooks.OnCrafting -= OnCrafting;
             Hooks.OnResearch -= OnResearch;
             Hooks.OnItemAdded -= OnItemAdded;
-            Hooks.OnConsoleReceived -= OnConsoleReceived;
+            Hooks.OnConsoleReceivedWithCancel -= OnConsoleReceived;
+            Hooks.OnBeltUse -= OnBeltUse;
+            Hooks.OnLootUse -= OnLootUse;
         }
 
         /// <summary>
@@ -193,15 +200,12 @@ namespace AuthMeServer
         /// <returns></returns>
         public Credential GetCredential(Fougerite.Player player)
         {
-            if (Credentials.ContainsKey(player.UID))
-            {
-                return Credentials[player.UID];
-            }
-
-            return null;
+            Credential credential;
+            Credentials.TryGetValue(player.UID, out credential);
+            return credential;
         }
 
-        private void ReloadConfig()
+        public void ReloadConfig()
         {
             if (!File.Exists(ModuleFolder + "\\Settings.ini"))
             {
@@ -212,6 +216,8 @@ namespace AuthMeServer
                 Settings.AddSetting("Settings", "TimeToLogin", TimeToLogin.ToString());
                 Settings.AddSetting("Settings", "SocialSiteForHelp", SocialSiteForHelp);
                 Settings.AddSetting("Settings", "RestrictedCommands", "home,tpa,tpaccept,hg");
+                Settings.AddSetting("Settings", "RestrictedConsoleCommands", "something.console,something.console2");
+                Settings.AddSetting("Settings", "RemovePermissionsUntilLogin", "true");
                 Settings.Save();
             }
 
@@ -224,12 +230,28 @@ namespace AuthMeServer
                 CredsReset = Settings.GetSetting("Settings", "CredsReset");
                 TimeToLogin = int.Parse(Settings.GetSetting("Settings", "TimeToLogin"));
                 SocialSiteForHelp = Settings.GetSetting("Settings", "SocialSiteForHelp");
+                RemovePermissionsUntilLogin = Settings.GetBoolSetting("Settings", "RemovePermissionsUntilLogin");
                 RestrictedCommands.Clear();
+                RestrictedConsoleCommands.Clear();
 
                 string data = Settings.GetSetting("Settings", "RestrictedCommands");
                 foreach (var x in data.Split(','))
                 {
+                    if (string.IsNullOrEmpty(x))
+                    {
+                        continue;
+                    }
                     RestrictedCommands.Add(x);
+                }
+
+                string data2 = Settings.GetSetting("Settings", "RestrictedConsoleCommands");
+                foreach (var x in data2.Split(','))
+                {
+                    if (string.IsNullOrEmpty(x))
+                    {
+                        continue;
+                    }
+                    RestrictedConsoleCommands.Add(x);
                 }
             }
             catch (Exception ex)
@@ -339,8 +361,13 @@ namespace AuthMeServer
                         {
                             player.ForceModeratorOff(false);
                         }
-                        
-                        WaitingUsers.Remove(player.UID);
+
+                        if (RemovePermissionsUntilLogin)
+                        {
+                            PermissionSystem.GetPermissionSystem().RemoveForceOffPermissions(player.UID);
+                        }
+
+                        WaitingUsers.TryRemove(player.UID);
                         DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
                         uLink.NetworkView.Get(player.PlayerClient.networkView)
                             .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
@@ -348,6 +375,11 @@ namespace AuthMeServer
                         foreach (var x in RestrictedCommands)
                         {
                             player.UnRestrictCommand(x);
+                        }
+
+                        foreach (var x in RestrictedConsoleCommands)
+                        {
+                            player.UnRestrictConsoleCommand(x);
                         }
 
                         AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " logged in using: " +
@@ -393,13 +425,13 @@ namespace AuthMeServer
                     string hash = SHA1Hash(password);
                     Auths.AddSetting("Login", player.SteamID, username.ToLower() + "---##---" + hash);
                     Auths.Save();
-                    Credentials.Add(player.UID, new Credential(username.ToLower(), hash));
+                    Credentials.TryAdd(player.UID, new Credential(username.ToLower(), hash));
                     player.MessageFrom("AuthMe",
                         orange + "You have registered with: " + username + " - " + password +
                         " (Your console has this info now too.)");
                     player.SendConsoleMessage(orange + "You have registered with: " + username + " - " + password);
 
-                    WaitingUsers.Remove(player.UID);
+                    WaitingUsers.TryRemove(player.UID);
                     DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
                     uLink.NetworkView.Get(player.PlayerClient.networkView)
                         .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
@@ -409,6 +441,11 @@ namespace AuthMeServer
                         player.UnRestrictCommand(x);
                     }
 
+                    foreach (var x in RestrictedConsoleCommands)
+                    {
+                        player.UnRestrictConsoleCommand(x);
+                    }
+
                     AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
                                    " registered an account: " + username);
                     msgc.ReturnMessage = "ValidRegistration";
@@ -416,7 +453,7 @@ namespace AuthMeServer
             }
         }
 
-        private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external)
+        private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external, ConsoleEvent ce)
         {
             if (arg.Class == "authme" && arg.Function == "resetuser")
             {
@@ -446,7 +483,7 @@ namespace AuthMeServer
 
                         if (Credentials.ContainsKey(plr.UID))
                         {
-                            Credentials.Remove(plr.UID);
+                            Credentials.TryRemove(plr.UID);
                         }
                                     
                         arg.ReplyWith(green + "User: " + plr.Name + " reset! He can now register a new account for that steamid.");
@@ -471,6 +508,24 @@ namespace AuthMeServer
                 }
             }
         }
+        
+        private void OnLootUse(LootStartEvent lootstartevent)
+        {
+            if (WaitingUsers.ContainsKey(lootstartevent.Player.UID))
+            {
+                lootstartevent.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                lootstartevent.Cancel();
+            }
+        }
+        
+        private void OnBeltUse(BeltUseEvent beltuseevent)
+        {
+            if (WaitingUsers.ContainsKey(beltuseevent.Player.UID))
+            {
+                beltuseevent.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                beltuseevent.Cancel();
+            }
+        }
 
         private void OnItemAdded(InventoryModEvent e)
         {
@@ -489,6 +544,7 @@ namespace AuthMeServer
             if (WaitingUsers.ContainsKey(re.Player.UID))
             {
                 re.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                re.Cancel();
             }
         }
 
@@ -497,15 +553,16 @@ namespace AuthMeServer
             if (WaitingUsers.ContainsKey(e.Player.UID))
             {
                 e.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                e.Cancel();
             }
         }
 
         private void OnEntityDeployedWithPlacer(Fougerite.Player player, Entity e, Fougerite.Player actualplacer)
         {
-            if (WaitingUsers.ContainsKey(player.UID))
+            if (WaitingUsers.ContainsKey(actualplacer.UID))
             {
                 e.Destroy();
-                player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                actualplacer.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
             }
         }
 
@@ -518,7 +575,11 @@ namespace AuthMeServer
                     player.RestrictCommand(x);
                 }
 
-                Dictionary<string, object> Data = new Dictionary<string, object>();
+                foreach (var x in RestrictedConsoleCommands)
+                {
+                    player.RestrictConsoleCommand(x);
+                }
+                
                 PrivilegeStorage storage = new PrivilegeStorage(player.Admin, player.Moderator);
                 
                 if (player.Admin)
@@ -530,11 +591,17 @@ namespace AuthMeServer
                 {
                     player.ForceModeratorOff(true);
                 }
-                
+
+                if (RemovePermissionsUntilLogin)
+                {
+                    PermissionSystem.GetPermissionSystem().ForceOffPermissions(player.UID, true);
+                }
+
+                Dictionary<string, object> Data = new Dictionary<string, object>();
                 Data["Player"] = player;
-                
                 CreateParallelTimer(TimeToLogin * 1000, Data).Start();
-                WaitingUsers.Add(player.UID, storage);
+                
+                WaitingUsers.TryAdd(player.UID, storage);
                 DataStore.GetInstance().Add("AuthMeLogin", player.UID, true);
                 SpawnedUsers.Remove(player.UID);
             }
@@ -586,7 +653,7 @@ namespace AuthMeServer
         {
             if (WaitingUsers.ContainsKey(player.UID))
             {
-                WaitingUsers.Remove(player.UID);
+                WaitingUsers.TryRemove(player.UID);
                 DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
             }
 
@@ -610,17 +677,14 @@ namespace AuthMeServer
                     }
                     he.DamageAmount = 0f;
                 }
-                else
+            }
+            if (he.AttackerIsPlayer && he.Attacker != null)
+            {
+                Fougerite.Player attacker = (Fougerite.Player) he.Attacker;
+                if (WaitingUsers.ContainsKey(attacker.UID))
                 {
-                    if (he.AttackerIsPlayer && he.Attacker != null)
-                    {
-                        Fougerite.Player attacker = (Fougerite.Player) he.Attacker;
-                        if (WaitingUsers.ContainsKey(attacker.UID))
-                        {
-                            attacker.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
-                            he.DamageAmount = 0f;
-                        }
-                    }
+                    attacker.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                    he.DamageAmount = 0f;
                 }
             }
         }
@@ -637,7 +701,7 @@ namespace AuthMeServer
                     player.MessageFrom("AuthMe", orange + "/authme register username password");
                     player.MessageFrom("AuthMe", orange + "/authme login username password");
                     player.MessageFrom("AuthMe", orange + "/authme changepw username newpassword");
-                    if (player.Admin || player.Moderator)
+                    if (player.Admin || player.Moderator || PermissionSystem.GetPermissionSystem().PlayerHasPermission(player, "authme.info"))
                     {
                         player.MessageFrom("AuthMe", orange + "/authme resetuser ingamename");
                         player.MessageFrom("AuthMe", orange + "/authme reload");
@@ -649,13 +713,15 @@ namespace AuthMeServer
                     switch (subcmd)
                     {
                         case "reload":
-                            if (player.Admin || player.Moderator)
+                        {
+                            if (player.Admin || player.Moderator || PermissionSystem.GetPermissionSystem().PlayerHasPermission(player, "authme.reload"))
                             {
                                 ReloadConfig();
                                 player.MessageFrom("AuthMe", green + "Config reloaded!");
                             }
 
                             break;
+                        }
                     }
                 }
                 else if (args.Length == 2)
@@ -664,7 +730,8 @@ namespace AuthMeServer
                     switch (subcmd)
                     {
                         case "resetuser":
-                            if (player.Admin || player.Moderator)
+                        {
+                            if (player.Admin || player.Moderator || PermissionSystem.GetPermissionSystem().PlayerHasPermission(player, "authme.resetuser"))
                             {
                                 Fougerite.Player plr = Fougerite.Server.GetServer().FindPlayer(args[1]);
                                 if (plr != null)
@@ -677,17 +744,21 @@ namespace AuthMeServer
 
                                     if (Credentials.ContainsKey(plr.UID))
                                     {
-                                        Credentials.Remove(plr.UID);
+                                        Credentials.TryRemove(plr.UID);
                                     }
-                                    
-                                    player.MessageFrom("AuthMe", green + "User: " + plr.Name + " reset! He can now register a new account for that steamid.");
+
+                                    player.MessageFrom("AuthMe",
+                                        green + "User: " + plr.Name +
+                                        " reset! He can now register a new account for that steamid.");
                                     plr.MessageFrom("AuthMe", green + CredsReset);
-                                    AuthLogger.Log("[USER RESET] " + player.Name + " - " + player.SteamID 
-                                                   + " - " + player.IP + " reset credetials for: " + plr.Name + " - " + plr.SteamID + " - " + plr.IP);
+                                    AuthLogger.Log("[USER RESET] " + player.Name + " - " + player.SteamID
+                                                   + " - " + player.IP + " reset credetials for: " + plr.Name + " - " +
+                                                   plr.SteamID + " - " + plr.IP);
                                 }
                             }
 
                             break;
+                        }
                     }
                 }
                 else if (args.Length == 3)
@@ -696,12 +767,15 @@ namespace AuthMeServer
                     switch (subcmd)
                     {
                         case "register":
+                        {
                             if (Credentials.ContainsKey(player.UID))
                             {
-                                player.MessageFrom("AuthMe", red + "This STEAMID is already protected using password authentication!");
+                                player.MessageFrom("AuthMe",
+                                    red + "This STEAMID is already protected using password authentication!");
+                                player.MessageFrom("AuthMe", "Seek help here: " + yellow + " " + SocialSiteForHelp);
                                 return;
                             }
-                            
+
                             string username = args[1];
                             string password = args[2];
 
@@ -710,57 +784,71 @@ namespace AuthMeServer
                                 player.MessageFrom("AuthMe", orange + "Type /authme register username password");
                                 return;
                             }
-                            
+
                             bool b = Regex.IsMatch(username, @"^[a-zA-Z0-9_&@%!+<>]+$");
                             bool b2 = Regex.IsMatch(password, @"^[a-zA-Z0-9_&@%!+<>]+$");
 
                             if (!b || !b2)
                             {
-                                player.MessageFrom("AuthMe", orange + "Sorry, no special characters or space! Only: a-zA-Z0-9_&@%!+<>");
+                                player.MessageFrom("AuthMe",
+                                    orange + "Sorry, no special characters or space! Only: a-zA-Z0-9_&@%!+<>");
                                 return;
                             }
-                            
+
                             if (username.Length > 25 || password.Length > 25)
                             {
-                                player.MessageFrom("AuthMe", orange + "Sorry, username and password length must be below 25.");
+                                player.MessageFrom("AuthMe",
+                                    orange + "Sorry, username and password length must be below 25.");
                                 return;
                             }
-                            
+
                             string hash = SHA1Hash(password);
                             Auths.AddSetting("Login", player.SteamID, username.ToLower() + "---##---" + hash);
                             Auths.Save();
-                            Credentials.Add(player.UID, new Credential(username.ToLower(), hash));
-                            player.MessageFrom("AuthMe", orange + "You have registered with: " + username + " - " + password + " (Your console has this info now too.)");
-                            player.SendConsoleMessage(orange + "You have registered with: " + username + " - " + password);
-                            
-                            WaitingUsers.Remove(player.UID);
+                            Credentials.TryAdd(player.UID, new Credential(username.ToLower(), hash));
+                            player.MessageFrom("AuthMe",
+                                orange + "You have registered with: " + username + " - " + password +
+                                " (Your console has this info now too.)");
+                            player.SendConsoleMessage(orange + "You have registered with: " + username + " - " +
+                                                      password);
+
+                            WaitingUsers.TryRemove(player.UID);
                             DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
                             uLink.NetworkView.Get(player.PlayerClient.networkView)
                                 .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
-                                
+
                             foreach (var x in RestrictedCommands)
                             {
                                 player.UnRestrictCommand(x);
                             }
 
-                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " registered an account: " + username);
+                            foreach (var x in RestrictedConsoleCommands)
+                            {
+                                player.UnRestrictConsoleCommand(x);
+                            }
+
+                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                           " registered an account: " + username);
                             break;
+                        }
                         case "login":
+                        {
                             if (!WaitingUsers.ContainsKey(player.UID))
                             {
                                 player.MessageFrom("AuthMe", orange + "You are logged in already.");
                                 return;
                             }
-    
+
                             string username2 = args[1];
                             string password2 = args[2];
-                            
+
                             if (username2.Length > 25 || password2.Length > 25)
                             {
-                                player.MessageFrom("AuthMe", orange + "Sorry, username and password length must be below 25.");
+                                player.MessageFrom("AuthMe",
+                                    orange + "Sorry, username and password length must be below 25.");
                                 return;
                             }
-                            
+
                             if (!Credentials.ContainsKey(player.UID))
                             {
                                 player.MessageFrom("AuthMe", orange + "This steamid is not registered yet!");
@@ -772,14 +860,17 @@ namespace AuthMeServer
                             if (cred.Username.ToLower() != username2.ToLower())
                             {
                                 player.MessageFrom("AuthMe", orange + "Invalid username!");
-                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " tried to login using: " + username2);
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                               " tried to login using: " + username2);
                                 return;
                             }
-    
+
                             if (cred.HashedPassword != SHA1Hash(password2))
                             {
-                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " tried to login using: " + username2);
-                                player.MessageFrom("AuthMe", orange + "Invalid password! Seek admin for help on their social site.");
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                               " tried to login using: " + username2);
+                                player.MessageFrom("AuthMe",
+                                    orange + "Invalid password! Seek admin for help on their social site.");
                             }
                             else
                             {
@@ -794,27 +885,42 @@ namespace AuthMeServer
                                 {
                                     player.ForceModeratorOff(false);
                                 }
-                                
-                                WaitingUsers.Remove(player.UID);
+
+                                if (RemovePermissionsUntilLogin)
+                                {
+                                    PermissionSystem.GetPermissionSystem().RemoveForceOffPermissions(player.UID);
+                                }
+
+                                WaitingUsers.TryRemove(player.UID);
                                 DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
                                 uLink.NetworkView.Get(player.PlayerClient.networkView)
                                     .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
-                                
+
                                 foreach (var x in RestrictedCommands)
                                 {
                                     player.UnRestrictCommand(x);
                                 }
-                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " logged in using: " + username2);
+
+                                foreach (var x in RestrictedConsoleCommands)
+                                {
+                                    player.UnRestrictConsoleCommand(x);
+                                }
+
+                                AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                               " logged in using: " + username2);
                                 player.MessageFrom("AuthMe", green + "Successfully logged in!");
                             }
+
                             break;
+                        }
                         case "changepw":
+                        {
                             if (WaitingUsers.ContainsKey(player.UID))
                             {
                                 player.MessageFrom("AuthMe", orange + "Nice try. You need to be logged in to do that.");
                                 return;
                             }
-                            
+
                             string username3 = args[1];
                             string password3 = args[2];
                             if (!Credentials.ContainsKey(player.UID))
@@ -829,26 +935,31 @@ namespace AuthMeServer
                                 player.MessageFrom("AuthMe", orange + "Invalid username!");
                                 return;
                             }
-                            
+
                             if (username3.Length > 25 || password3.Length > 25)
                             {
-                                player.MessageFrom("AuthMe", orange + "Sorry, username and password length must be below 25.");
+                                player.MessageFrom("AuthMe",
+                                    orange + "Sorry, username and password length must be below 25.");
                                 return;
                             }
 
-                            Credentials.Remove(player.UID);
-                            
+                            Credentials.TryRemove(player.UID);
+
                             string hash3 = SHA1Hash(password3);
                             Auths.SetSetting("Login", player.SteamID, username3.ToLower() + "---##---" + hash3);
                             Auths.Save();
-                            Credentials.Add(player.UID, new Credential(username3.ToLower(), hash3));
-                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP + " changed password using: " + username3);
-                            
+                            Credentials.TryAdd(player.UID, new Credential(username3.ToLower(), hash3));
+                            AuthLogger.Log(player.Name + " - " + player.SteamID + " - " + player.IP +
+                                           " changed password using: " + username3);
+
                             player.MessageFrom("AuthMe", green + "Password successfully changed!");
                             break;
+                        }
                         default:
+                        {
                             player.MessageFrom("AuthMe", orange + "Invalid command. Type /authme for help.");
                             break;
+                        }
                     }
                 }
             }
