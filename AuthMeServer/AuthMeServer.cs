@@ -32,9 +32,12 @@ namespace AuthMeServer
         public const string green = "[color green]";
         public const string orange = "[color #ffa500]";
         public string YouNeedToBeLoggedIn = "You can't do this. You need to be logged in.";
+        public string PleaseLoginOrRegister = "Please use /authme register or /authme login to authenticate";
+        public string YouWillBeKicked = "Otherwise you will be KICKED!";
         public string CredsReset = "Your credentials are reset! Type /authme register username password";
         public string SocialSiteForHelp = "InsertYourSiteHere";
-        public int TimeToLogin = 60;
+        public int TimeToLogin = 120;
+        public int HelpTextTime = 20;
         public bool RemovePermissionsUntilLogin = true;
         
         public override string Name
@@ -218,6 +221,9 @@ namespace AuthMeServer
                 Settings.AddSetting("Settings", "RestrictedCommands", "home,tpa,tpaccept,hg");
                 Settings.AddSetting("Settings", "RestrictedConsoleCommands", "something.console,something.console2");
                 Settings.AddSetting("Settings", "RemovePermissionsUntilLogin", "true");
+                Settings.AddSetting("Settings", "PleaseLoginOrRegister", PleaseLoginOrRegister);
+                Settings.AddSetting("Settings", "YouWillBeKicked", YouWillBeKicked);
+                Settings.AddSetting("Settings", "HelpTextTime", HelpTextTime.ToString());
                 Settings.Save();
             }
 
@@ -229,7 +235,10 @@ namespace AuthMeServer
                 YouNeedToBeLoggedIn = Settings.GetSetting("Settings", "YouNeedToBeLoggedIn");
                 CredsReset = Settings.GetSetting("Settings", "CredsReset");
                 TimeToLogin = int.Parse(Settings.GetSetting("Settings", "TimeToLogin"));
+                HelpTextTime = int.Parse(Settings.GetSetting("Settings", "HelpTextTime"));
                 SocialSiteForHelp = Settings.GetSetting("Settings", "SocialSiteForHelp");
+                PleaseLoginOrRegister = Settings.GetSetting("Settings", "PleaseLoginOrRegister");
+                YouWillBeKicked = Settings.GetSetting("Settings", "YouWillBeKicked");
                 RemovePermissionsUntilLogin = Settings.GetBoolSetting("Settings", "RemovePermissionsUntilLogin");
                 RestrictedCommands.Clear();
                 RestrictedConsoleCommands.Clear();
@@ -273,7 +282,20 @@ namespace AuthMeServer
             e.Kill();
             var data = e.Args;
             Fougerite.Player player = (Fougerite.Player) data["Player"];
-            if (player.IsOnline && WaitingUsers.ContainsKey(player.UID))
+
+            if (data.ContainsKey("HelpText"))
+            {
+                if (player.IsOnline && WaitingUsers.ContainsKey(player.UID))
+                {
+                    player.MessageFrom("AuthMe", orange + PleaseLoginOrRegister);
+                    player.MessageFrom("AuthMe", orange + YouWillBeKicked);
+                    player.MessageFrom("AuthMe", yellow + "Get help with login at: " + SocialSiteForHelp);
+                    
+                    // Keep resetting the timer until player logged in or disconnected
+                    CreateParallelTimer(HelpTextTime * 1000, data).Start();
+                }
+            }
+            else if (player.IsOnline && WaitingUsers.ContainsKey(player.UID))
             {
                 player.Disconnect();
             }
@@ -604,6 +626,15 @@ namespace AuthMeServer
                 WaitingUsers.TryAdd(player.UID, storage);
                 DataStore.GetInstance().Add("AuthMeLogin", player.UID, true);
                 SpawnedUsers.Remove(player.UID);
+                
+                Dictionary<string, object> Data2 = new Dictionary<string, object>();
+                Data["Player"] = player;
+                Data["HelpText"] = true;
+                CreateParallelTimer(HelpTextTime * 1000, Data2).Start();
+                
+                player.MessageFrom("AuthMe", orange + PleaseLoginOrRegister);
+                player.MessageFrom("AuthMe", orange + YouWillBeKicked);
+                player.MessageFrom("AuthMe", yellow + "Get help with login at: " + SocialSiteForHelp);
             }
         }
 
