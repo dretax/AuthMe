@@ -871,6 +871,7 @@ namespace AuthMeServer
                                                " tried to login using: " + username2);
                                 player.MessageFrom("AuthMe",
                                     orange + "Invalid password! Seek admin for help on their social site.");
+                                player.MessageFrom("AuthMe", "Seek help here: " + yellow + " " + SocialSiteForHelp);
                             }
                             else
                             {
