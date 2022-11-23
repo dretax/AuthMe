@@ -57,7 +57,7 @@ namespace AuthMeServer
 
         public override Version Version
         {
-            get { return new Version("1.1"); }
+            get { return new Version("1.2"); }
         }
         
         public override void Initialize()
@@ -116,6 +116,8 @@ namespace AuthMeServer
             Hooks.OnModulesLoaded += OnModulesLoaded;
             Hooks.OnBeltUse += OnBeltUse;
             Hooks.OnLootUse += OnLootUse;
+            Hooks.OnItemPickup += OnItemPickup;
+            Hooks.OnDoorUse += OnDoorUse;
         }
 
         public override void DeInitialize()
@@ -140,6 +142,8 @@ namespace AuthMeServer
             Hooks.OnConsoleReceivedWithCancel -= OnConsoleReceived;
             Hooks.OnBeltUse -= OnBeltUse;
             Hooks.OnLootUse -= OnLootUse;
+            Hooks.OnItemPickup -= OnItemPickup;
+            Hooks.OnDoorUse -= OnDoorUse;
         }
 
         /// <summary>
@@ -474,19 +478,43 @@ namespace AuthMeServer
                 }
             }
         }
+        
+        private void OnDoorUse(Fougerite.Player player, DoorEvent de)
+        {
+            if (WaitingUsers.ContainsKey(player.UID))
+            {
+                player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                de.Open = false;
+            }
+        }
+
+        private void OnItemPickup(ItemPickupEvent itempickupevent)
+        {
+            if (WaitingUsers.ContainsKey(itempickupevent.Player.UID))
+            {
+                itempickupevent.Player.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                itempickupevent.Cancel();
+            }
+        }
 
         private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external, ConsoleEvent ce)
         {
+            Fougerite.Player adminplr = null;
+            if (arg.argUser != null)
+            {
+                adminplr = Fougerite.Server.GetServer().FindPlayer(arg.argUser.userID);
+                if (adminplr != null && WaitingUsers.ContainsKey(adminplr.UID))
+                {
+                    adminplr.MessageFrom("AuthMe", red + YouNeedToBeLoggedIn);
+                    ce.Cancel();
+                    return;
+                }
+            }
+            
             if (arg.Class == "authme" && arg.Function == "resetuser")
             {
                 if ((arg.argUser != null && arg.argUser.admin) || arg.argUser == null)
                 {
-                    Fougerite.Player adminplr = null;
-                    if (arg.argUser != null)
-                    {
-                        adminplr = Fougerite.Server.GetServer().FindPlayer(arg.argUser.userID);
-                    }
-                    
                     string name = string.Join(" ", arg.Args);
                     if (string.IsNullOrEmpty(name))
                     {
@@ -740,6 +768,12 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 1)
                 {
+                    // Just in case...
+                    if (WaitingUsers.ContainsKey(player.UID))
+                    {
+                        return;
+                    }
+                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
@@ -757,6 +791,12 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 2)
                 {
+                    // Just in case...
+                    if (WaitingUsers.ContainsKey(player.UID))
+                    {
+                        return;
+                    }
+                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
@@ -794,6 +834,12 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 3)
                 {
+                    // Just in case...
+                    if (WaitingUsers.ContainsKey(player.UID))
+                    {
+                        return;
+                    }
+                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
