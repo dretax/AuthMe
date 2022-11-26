@@ -35,7 +35,6 @@ d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\Micro
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\IronPython.dll
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\Microsoft.Scripting.Core.dll
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\Microsoft.Dynamic.dll
-d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\Fougerite.pdb
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\RustPP.pdb
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\IronPython.xml
 d:\Projects\NETPlatform\Visual Studio 2013\AuthMe\AuthMeServer\bin\Release\Microsoft.Scripting.Core.xml

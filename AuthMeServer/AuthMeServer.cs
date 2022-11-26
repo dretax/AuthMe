@@ -11,6 +11,7 @@ using Fougerite.Concurrent;
 using Fougerite.Events;
 using Fougerite.Permissions;
 using RustBuster2016Server;
+using UnityEngine;
 
 namespace AuthMeServer
 {
@@ -36,6 +37,7 @@ namespace AuthMeServer
         public string YouWillBeKicked = "Otherwise you will be KICKED!";
         public string CredsReset = "Your credentials are reset! Type /authme register username password";
         public string SocialSiteForHelp = "InsertYourSiteHere";
+        public bool RestrictAllConsoleCommands = false;
         public int TimeToLogin = 120;
         public int HelpTextTime = 20;
         public bool RemovePermissionsUntilLogin = true;
@@ -57,7 +59,7 @@ namespace AuthMeServer
 
         public override Version Version
         {
-            get { return new Version("1.2"); }
+            get { return new Version("1.3"); }
         }
         
         public override void Initialize()
@@ -223,7 +225,7 @@ namespace AuthMeServer
                 Settings.AddSetting("Settings", "TimeToLogin", TimeToLogin.ToString());
                 Settings.AddSetting("Settings", "SocialSiteForHelp", SocialSiteForHelp);
                 Settings.AddSetting("Settings", "RestrictedCommands", "home,tpa,tpaccept,hg");
-                Settings.AddSetting("Settings", "RestrictedConsoleCommands", "something.console,something.console2");
+                Settings.AddSetting("Settings", "RestrictedConsoleCommands", "something.console,something.console2,*");
                 Settings.AddSetting("Settings", "RemovePermissionsUntilLogin", "true");
                 Settings.AddSetting("Settings", "PleaseLoginOrRegister", PleaseLoginOrRegister);
                 Settings.AddSetting("Settings", "YouWillBeKicked", YouWillBeKicked);
@@ -248,23 +250,32 @@ namespace AuthMeServer
                 RestrictedConsoleCommands.Clear();
 
                 string data = Settings.GetSetting("Settings", "RestrictedCommands");
-                foreach (var x in data.Split(','))
+                foreach (string x in data.Split(','))
                 {
                     if (string.IsNullOrEmpty(x))
                     {
                         continue;
                     }
-                    RestrictedCommands.Add(x);
+                    RestrictedCommands.Add(x.ToLower());
                 }
 
                 string data2 = Settings.GetSetting("Settings", "RestrictedConsoleCommands");
-                foreach (var x in data2.Split(','))
+                foreach (string x in data2.Split(','))
                 {
                     if (string.IsNullOrEmpty(x))
                     {
                         continue;
                     }
-                    RestrictedConsoleCommands.Add(x);
+
+                    string lower = x.ToLower();
+                    if (lower == "*")
+                    {
+                        RestrictAllConsoleCommands = true;
+                    }
+                    else
+                    {
+                        RestrictedConsoleCommands.Add(x.ToLower());
+                    }
                 }
             }
             catch (Exception ex)
@@ -284,13 +295,20 @@ namespace AuthMeServer
         private void Callback(AuthMeTE e)
         {
             e.Kill();
-            var data = e.Args;
+            
+            Dictionary<string, object> data = e.Args;
             Fougerite.Player player = (Fougerite.Player) data["Player"];
 
             if (data.ContainsKey("HelpText"))
             {
                 if (player.IsOnline && WaitingUsers.ContainsKey(player.UID))
                 {
+                    Vector3 spawnPosition = (Vector3) data["OriginalPosition"];
+                    if (spawnPosition.x != 0f && spawnPosition.y != 0f && spawnPosition.z != 0f)
+                    {
+                        player.TeleportTo(spawnPosition, false);
+                    }
+                    
                     player.MessageFrom("AuthMe", orange + PleaseLoginOrRegister);
                     player.MessageFrom("AuthMe", orange + YouWillBeKicked);
                     player.MessageFrom("AuthMe", yellow + "Get help with login at: " + SocialSiteForHelp);
@@ -500,7 +518,8 @@ namespace AuthMeServer
         private void OnConsoleReceived(ref ConsoleSystem.Arg arg, bool external, ConsoleEvent ce)
         {
             Fougerite.Player adminplr = null;
-            if (arg.argUser != null)
+            // Restrict all commands only if * was applied
+            if (arg.argUser != null && RestrictAllConsoleCommands)
             {
                 adminplr = Fougerite.Server.GetServer().FindPlayer(arg.argUser.userID);
                 if (adminplr != null && WaitingUsers.ContainsKey(adminplr.UID))
@@ -627,6 +646,9 @@ namespace AuthMeServer
 
                 foreach (var x in RestrictedConsoleCommands)
                 {
+                    if (x == "*")
+                        continue;
+                    
                     player.RestrictConsoleCommand(x);
                 }
                 
@@ -658,6 +680,7 @@ namespace AuthMeServer
                 Dictionary<string, object> Data2 = new Dictionary<string, object>();
                 Data["Player"] = player;
                 Data["HelpText"] = true;
+                Data["OriginalPosition"] = se.Location;
                 CreateParallelTimer(HelpTextTime * 1000, Data2).Start();
                 
                 player.MessageFrom("AuthMe", orange + PleaseLoginOrRegister);
@@ -768,12 +791,6 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 1)
                 {
-                    // Just in case...
-                    if (WaitingUsers.ContainsKey(player.UID))
-                    {
-                        return;
-                    }
-                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
@@ -791,12 +808,6 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 2)
                 {
-                    // Just in case...
-                    if (WaitingUsers.ContainsKey(player.UID))
-                    {
-                        return;
-                    }
-                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
@@ -834,12 +845,6 @@ namespace AuthMeServer
                 }
                 else if (args.Length == 3)
                 {
-                    // Just in case...
-                    if (WaitingUsers.ContainsKey(player.UID))
-                    {
-                        return;
-                    }
-                    
                     string subcmd = args[0];
                     switch (subcmd)
                     {
@@ -1045,7 +1050,7 @@ namespace AuthMeServer
 
         private string SHA1Hash(string input)
         {
-            var hash = (new SHA1Managed()).ComputeHash(Encoding.UTF8.GetBytes(input));
+            byte[] hash = (new SHA1Managed()).ComputeHash(Encoding.UTF8.GetBytes(input));
             return string.Join("", hash.Select(b => b.ToString("x2")).ToArray());
         }
     }
