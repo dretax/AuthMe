@@ -413,8 +413,10 @@ namespace AuthMeServer
 
                         WaitingUsers.TryRemove(player.UID);
                         DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
-                        uLink.NetworkView.Get(player.PlayerClient.networkView)
-                            .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                        if (FoundRB)
+                        {
+                            uLink.NetworkView.Get(player.PlayerClient.networkView).RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                        }
 
                         foreach (var x in RestrictedCommands)
                         {
@@ -477,8 +479,11 @@ namespace AuthMeServer
 
                     WaitingUsers.TryRemove(player.UID);
                     DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
-                    uLink.NetworkView.Get(player.PlayerClient.networkView)
-                        .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+
+                    if (FoundRB)
+                    {
+                        uLink.NetworkView.Get(player.PlayerClient.networkView).RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                    }
 
                     foreach (var x in RestrictedCommands)
                     {
@@ -896,8 +901,11 @@ namespace AuthMeServer
 
                             WaitingUsers.TryRemove(player.UID);
                             DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
-                            uLink.NetworkView.Get(player.PlayerClient.networkView)
-                                .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+
+                            if (FoundRB)
+                            {
+                                uLink.NetworkView.Get(player.PlayerClient.networkView).RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                            }
 
                             foreach (var x in RestrictedCommands)
                             {
@@ -976,8 +984,11 @@ namespace AuthMeServer
 
                                 WaitingUsers.TryRemove(player.UID);
                                 DataStore.GetInstance().Remove("AuthMeLogin", player.UID);
-                                uLink.NetworkView.Get(player.PlayerClient.networkView)
-                                    .RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+
+                                if (FoundRB)
+                                {
+                                    uLink.NetworkView.Get(player.PlayerClient.networkView).RPC("DestroyFreezeAuthMe", player.NetworkPlayer);
+                                }
 
                                 foreach (var x in RestrictedCommands)
                                 {
